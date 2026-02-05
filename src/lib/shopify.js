@@ -1,5 +1,5 @@
 // Shopify Storefront API Configuration
-const SHOPIFY_STORE_DOMAIN = 'kushie-hemp.myshopify.com'
+const SHOPIFY_STORE_DOMAIN = 'wa16ig-yj.myshopify.com'
 const SHOPIFY_STOREFRONT_ACCESS_TOKEN = '35c2846ca038e01dbc5bed5957e72c0e'
 const API_VERSION = '2024-10'
 
