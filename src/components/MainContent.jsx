@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { products, featuredProducts } from '../data/products'
+import { featuredProducts } from '../data/products'
+import useShopifyProducts from '../hooks/useShopifyProducts'
 
 function MainContent({ searchFocused, openPopup, activeDropdown, setActiveDropdown }) {
   const [activeTab, setActiveTab] = useState('all')
+  const { products, loading, error, usingFallback } = useShopifyProducts()
 
   const tabs = [
     { id: 'all', label: 'All Products' },
@@ -15,6 +17,27 @@ function MainContent({ searchFocused, openPopup, activeDropdown, setActiveDropdo
     e.stopPropagation()
     setActiveDropdown(activeDropdown === productId ? null : productId)
   }
+
+  // Filter products based on active tab
+  const filteredProducts = products.filter((product) => {
+    switch (activeTab) {
+      case 'sale':
+        return product.compareAtPrice || product.originalPrice
+      case 'new':
+        // Show last 5 products as "new arrivals"
+        return products.indexOf(product) >= Math.max(0, products.length - 5)
+      case 'popular':
+        // Show first 5 as "popular"
+        return products.indexOf(product) < 5
+      case 'all':
+      default:
+        return true
+    }
+  })
+
+  // Split products for display sections
+  const featuredList = filteredProducts.slice(0, Math.ceil(filteredProducts.length / 2))
+  const bestSellers = filteredProducts.slice(Math.ceil(filteredProducts.length / 2))
 
   return (
     <div className="main-container">
@@ -75,64 +98,150 @@ function MainContent({ searchFocused, openPopup, activeDropdown, setActiveDropdo
           />
         </div>
 
-        <div className="content-section">
-          <div className="content-section-title">Featured Products</div>
-          <ul>
-            {products.slice(0, 5).map((product) => (
-              <li key={product.id} className="adobe-product">
-                <div
-                  className="product-icon"
-                  style={{ backgroundColor: product.color }}
-                >
-                  {product.icon}
-                </div>
-                <div className="products">
-                  {product.name}
-                </div>
-                <span className="status">
-                  <span className={`status-circle ${product.inStock ? 'green' : ''}`} />
-                  {product.inStock ? 'In Stock' : 'Low Stock'}
-                </span>
-                <span className="price">
-                  {product.originalPrice && (
-                    <span className="original-price">${product.originalPrice}</span>
-                  )}
-                  ${product.price}
-                </span>
-                <div className="button-wrapper">
-                  <button
-                    className={`content-button status-button ${!product.inStock ? 'open' : ''}`}
-                    onClick={() => openPopup('addToCart')}
-                  >
-                    Add to Cart
-                  </button>
-                  <div className="menu" />
-                  <button
-                    className={`dropdown ${activeDropdown === product.id ? 'is-active' : ''}`}
-                    onClick={(e) => toggleDropdown(product.id, e)}
-                  >
-                    <ul>
-                      <li onClick={() => openPopup('quickView')}>
-                        <a href="#">Quick View</a>
-                      </li>
-                      <li>
-                        <a href="#">Add to Wishlist</a>
-                      </li>
-                      <li>
-                        <a href="#">View Lab Results</a>
-                      </li>
-                    </ul>
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Shopify sync status indicator */}
+        {!loading && (
+          <div className="content-section" style={{ padding: '0 20px' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '12px',
+                opacity: 0.6,
+                marginBottom: '-10px',
+              }}
+            >
+              <span
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: usingFallback ? '#f97316' : '#22c55e',
+                  display: 'inline-block',
+                }}
+              />
+              {usingFallback
+                ? 'Showing local catalog (Shopify sync pending)'
+                : `Synced from Shopify — ${products.length} products`}
+            </div>
+          </div>
+        )}
 
+        {/* Loading State */}
+        {loading && (
+          <div className="content-section">
+            <div className="content-section-title">Loading Products...</div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                padding: '40px',
+                opacity: 0.5,
+              }}
+            >
+              <div className="loading-spinner" />
+            </div>
+          </div>
+        )}
+
+        {/* Featured / All Products Section */}
+        {!loading && featuredList.length > 0 && (
+          <div className="content-section">
+            <div className="content-section-title">
+              {activeTab === 'all' ? 'All Products' : tabs.find((t) => t.id === activeTab)?.label}
+              {!usingFallback && (
+                <span style={{ fontSize: '12px', opacity: 0.5, marginLeft: '10px', fontWeight: 'normal' }}>
+                  via Shopify
+                </span>
+              )}
+            </div>
+            <ul>
+              {featuredList.map((product) => (
+                <li key={product.id} className="adobe-product">
+                  {product.image ? (
+                    <img
+                      src={product.image}
+                      alt={product.imageAlt || product.name}
+                      className="product-icon"
+                      style={{
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '6px',
+                        objectFit: 'cover',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="product-icon"
+                      style={{ backgroundColor: product.color }}
+                    >
+                      {product.icon}
+                    </div>
+                  )}
+                  <div className="products">
+                    {product.name}
+                  </div>
+                  <span className="status">
+                    <span className={`status-circle ${product.inStock ? 'green' : ''}`} />
+                    {product.inStock ? 'In Stock' : 'Out of Stock'}
+                  </span>
+                  <span className="price">
+                    {(product.compareAtPrice || product.originalPrice) && (
+                      <span className="original-price">
+                        ${(product.compareAtPrice || product.originalPrice).toFixed(2)}
+                      </span>
+                    )}
+                    ${product.price.toFixed(2)}
+                  </span>
+                  <div className="button-wrapper">
+                    <button
+                      className={`content-button status-button ${!product.inStock ? 'open' : ''}`}
+                      onClick={() => {
+                        if (product.shopifyUrl) {
+                          window.open(product.shopifyUrl, '_blank')
+                        } else {
+                          openPopup('addToCart')
+                        }
+                      }}
+                    >
+                      {product.shopifyUrl && !usingFallback ? 'Buy Now' : 'Add to Cart'}
+                    </button>
+                    <div className="menu" />
+                    <button
+                      className={`dropdown ${activeDropdown === product.id ? 'is-active' : ''}`}
+                      onClick={(e) => toggleDropdown(product.id, e)}
+                    >
+                      <ul>
+                        <li onClick={() => openPopup('quickView')}>
+                          <a href="#">Quick View</a>
+                        </li>
+                        <li>
+                          <a href="#">Add to Wishlist</a>
+                        </li>
+                        {product.shopifyUrl && !usingFallback && (
+                          <li>
+                            <a href={product.shopifyUrl} target="_blank" rel="noopener noreferrer">
+                              View on Store
+                            </a>
+                          </li>
+                        )}
+                        <li>
+                          <a href="#">View Lab Results</a>
+                        </li>
+                      </ul>
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Popular Categories */}
         <div className="content-section">
           <div className="content-section-title">Popular Categories</div>
           <div className="apps-card">
-            {featuredProducts.map((product, index) => (
+            {featuredProducts.map((product) => (
               <div
                 key={product.id}
                 className="app-card"
@@ -159,43 +268,70 @@ function MainContent({ searchFocused, openPopup, activeDropdown, setActiveDropdo
           </div>
         </div>
 
-        <div className="content-section">
-          <div className="content-section-title">Best Sellers</div>
-          <ul>
-            {products.slice(5, 10).map((product) => (
-              <li key={product.id} className="adobe-product">
-                <div
-                  className="product-icon"
-                  style={{ backgroundColor: product.color }}
-                >
-                  {product.icon}
-                </div>
-                <div className="products">
-                  {product.name}
-                </div>
-                <span className="status">
-                  <span className={`status-circle ${product.inStock ? 'green' : ''}`} />
-                  {product.inStock ? 'In Stock' : 'Low Stock'}
-                </span>
-                <span className="price">
-                  {product.originalPrice && (
-                    <span className="original-price">${product.originalPrice}</span>
+        {/* Best Sellers / More Products */}
+        {!loading && bestSellers.length > 0 && (
+          <div className="content-section">
+            <div className="content-section-title">
+              {activeTab === 'all' ? 'More Products' : 'More Results'}
+            </div>
+            <ul>
+              {bestSellers.map((product) => (
+                <li key={product.id} className="adobe-product">
+                  {product.image ? (
+                    <img
+                      src={product.image}
+                      alt={product.imageAlt || product.name}
+                      className="product-icon"
+                      style={{
+                        width: '34px',
+                        height: '34px',
+                        borderRadius: '6px',
+                        objectFit: 'cover',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="product-icon"
+                      style={{ backgroundColor: product.color }}
+                    >
+                      {product.icon}
+                    </div>
                   )}
-                  ${product.price}
-                </span>
-                <div className="button-wrapper">
-                  <button
-                    className={`content-button status-button ${!product.inStock ? 'open' : ''}`}
-                    onClick={() => openPopup('addToCart')}
-                  >
-                    Add to Cart
-                  </button>
-                  <div className="menu" />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+                  <div className="products">
+                    {product.name}
+                  </div>
+                  <span className="status">
+                    <span className={`status-circle ${product.inStock ? 'green' : ''}`} />
+                    {product.inStock ? 'In Stock' : 'Out of Stock'}
+                  </span>
+                  <span className="price">
+                    {(product.compareAtPrice || product.originalPrice) && (
+                      <span className="original-price">
+                        ${(product.compareAtPrice || product.originalPrice).toFixed(2)}
+                      </span>
+                    )}
+                    ${product.price.toFixed(2)}
+                  </span>
+                  <div className="button-wrapper">
+                    <button
+                      className={`content-button status-button ${!product.inStock ? 'open' : ''}`}
+                      onClick={() => {
+                        if (product.shopifyUrl && !usingFallback) {
+                          window.open(product.shopifyUrl, '_blank')
+                        } else {
+                          openPopup('addToCart')
+                        }
+                      }}
+                    >
+                      {product.shopifyUrl && !usingFallback ? 'Buy Now' : 'Add to Cart'}
+                    </button>
+                    <div className="menu" />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   )
