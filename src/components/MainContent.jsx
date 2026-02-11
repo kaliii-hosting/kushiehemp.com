@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { featuredProducts } from '../data/products'
-import useShopifyProducts from '../hooks/useShopifyProducts'
+import { useCart } from '../context/CartContext'
+import ProductDetail from './ProductDetail'
 
-function MainContent({ searchFocused, openPopup, activeDropdown, setActiveDropdown }) {
+function MainContent({ searchFocused, selectedProduct, onProductClick, onCloseDetail, onAddToCartFromDetail, sidebarCategory, onClearSidebarCategory, products, loading, usingFallback }) {
   const [activeTab, setActiveTab] = useState('all')
-  const { products, loading, error, usingFallback } = useShopifyProducts()
+  const { addToCart, setIsCartOpen } = useCart()
 
   const tabs = [
     { id: 'all', label: 'All Products' },
@@ -13,47 +13,91 @@ function MainContent({ searchFocused, openPopup, activeDropdown, setActiveDropdo
     { id: 'sale', label: 'On Sale' },
   ]
 
-  const toggleDropdown = (productId, e) => {
-    e.stopPropagation()
-    setActiveDropdown(activeDropdown === productId ? null : productId)
+  // Truncate name to first 4 words
+  const truncateName = (name) => {
+    if (!name) return 'Product'
+    const words = name.split(' ')
+    if (words.length <= 4) return name
+    return words.slice(0, 4).join(' ') + '...'
   }
 
-  // Filter products based on active tab
+  // Category name lookup for display
+  const categoryNames = {
+    flower: 'Flower',
+    edibles: 'Edibles',
+    concentrates: 'Concentrates',
+    cartridges: 'Cartridges',
+    disposables: 'Disposables',
+    pods: 'Pods',
+    batteries: 'Batteries',
+    prerolls: 'Infused Prerolls',
+    bundles: 'Bundles & Deals',
+    new: 'New Arrivals',
+  }
+
+  // Filter products based on sidebar category OR active tab
   const filteredProducts = products.filter((product) => {
+    // Sidebar category takes priority when set
+    if (sidebarCategory) {
+      if (sidebarCategory === 'new') {
+        return products.indexOf(product) >= Math.max(0, products.length - 10)
+      }
+      // Match by product.category field (or productType for Shopify products)
+      const cat = (product.category || product.productType || '').toLowerCase()
+      return cat === sidebarCategory
+    }
+
+    // Otherwise use the header tab filter
     switch (activeTab) {
       case 'sale':
-        return product.compareAtPrice || product.originalPrice
+        return product.compareAtPrice && product.compareAtPrice > product.price
       case 'new':
-        // Show last 5 products as "new arrivals"
-        return products.indexOf(product) >= Math.max(0, products.length - 5)
+        return products.indexOf(product) >= Math.max(0, products.length - 10)
       case 'popular':
-        // Show first 5 as "popular"
-        return products.indexOf(product) < 5
+        return products.indexOf(product) < 10
       case 'all':
       default:
         return true
     }
   })
 
-  // Split products for display sections
-  const featuredList = filteredProducts.slice(0, Math.ceil(filteredProducts.length / 2))
-  const bestSellers = filteredProducts.slice(Math.ceil(filteredProducts.length / 2))
+  const handleAddToCart = (product, e) => {
+    e.stopPropagation()
+    addToCart(product)
+    setIsCartOpen(true)
+  }
+
+  const handleTabClick = (tabId) => {
+    setActiveTab(tabId)
+    // Clear sidebar selection when using header tabs
+    if (onClearSidebarCategory) {
+      onClearSidebarCategory()
+    }
+  }
+
+  // Determine what title to show
+  const getSectionTitle = () => {
+    if (sidebarCategory) {
+      return categoryNames[sidebarCategory] || sidebarCategory
+    }
+    return tabs.find((t) => t.id === activeTab)?.label || 'All Products'
+  }
 
   return (
     <div className="main-container">
       <div className="main-header">
         <a href="#" className="menu-link-main">
-          Premium Hemp Products
+          Kushie Hemp Store
         </a>
         <div className="header-menu">
           {tabs.map((tab) => (
             <a
               key={tab.id}
               href="#"
-              className={`main-header-link ${activeTab === tab.id ? 'is-active' : ''}`}
+              className={`main-header-link ${!sidebarCategory && activeTab === tab.id ? 'is-active' : ''}`}
               onClick={(e) => {
                 e.preventDefault()
-                setActiveTab(tab.id)
+                handleTabClick(tab.id)
               }}
             >
               {tab.label}
@@ -63,18 +107,11 @@ function MainContent({ searchFocused, openPopup, activeDropdown, setActiveDropdo
       </div>
 
       <div className={`content-wrapper ${searchFocused ? 'overlay' : ''}`}>
+        {/* Hero Banner */}
         <div className="content-wrapper-header">
           <div className="content-wrapper-context">
             <h3 className="img-content">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
               </svg>
               Premium Hemp Collection
@@ -82,13 +119,9 @@ function MainContent({ searchFocused, openPopup, activeDropdown, setActiveDropdo
             <div className="content-text">
               Discover our curated selection of premium hemp products. All items are
               lab-tested for purity and potency. Free shipping on orders over $75.
-              Subscribe and save 20% on your first order.
             </div>
-            <button
-              className="content-button"
-              onClick={() => openPopup('subscription')}
-            >
-              Subscribe Now
+            <button className="content-button" onClick={() => handleTabClick('all')}>
+              Shop All Products
             </button>
           </div>
           <img
@@ -98,238 +131,139 @@ function MainContent({ searchFocused, openPopup, activeDropdown, setActiveDropdo
           />
         </div>
 
-        {/* Shopify sync status indicator */}
+        {/* Sync Status */}
         {!loading && (
-          <div className="content-section" style={{ padding: '0 20px' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '12px',
-                opacity: 0.6,
-                marginBottom: '-10px',
-              }}
-            >
-              <span
-                style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: usingFallback ? '#f97316' : '#22c55e',
-                  display: 'inline-block',
-                }}
-              />
-              {usingFallback
-                ? 'Showing local catalog (Shopify sync pending)'
-                : `Synced from Shopify — ${products.length} products`}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', opacity: 0.6, marginTop: '20px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: usingFallback ? '#f97316' : '#22c55e', display: 'inline-block' }} />
+            {usingFallback
+              ? 'Showing local catalog (Shopify sync pending)'
+              : `Synced from Shopify — ${products.length} products`}
           </div>
         )}
 
-        {/* Loading State */}
+        {/* Loading */}
         {loading && (
           <div className="content-section">
             <div className="content-section-title">Loading Products...</div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'center',
-                padding: '40px',
-                opacity: 0.5,
-              }}
-            >
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px', opacity: 0.5 }}>
               <div className="loading-spinner" />
             </div>
           </div>
         )}
 
-        {/* Featured / All Products Section */}
-        {!loading && featuredList.length > 0 && (
+        {/* Product Detail (inline, replaces grid) */}
+        {selectedProduct && !loading && (
           <div className="content-section">
-            <div className="content-section-title">
-              {activeTab === 'all' ? 'All Products' : tabs.find((t) => t.id === activeTab)?.label}
-              {!usingFallback && (
-                <span style={{ fontSize: '12px', opacity: 0.5, marginLeft: '10px', fontWeight: 'normal' }}>
-                  via Shopify
-                </span>
-              )}
-            </div>
-            <ul>
-              {featuredList.map((product) => (
-                <li key={product.id} className="adobe-product">
-                  {product.image ? (
-                    <img
-                      src={product.image}
-                      alt={product.imageAlt || product.name}
-                      className="product-icon"
-                      style={{
-                        width: '34px',
-                        height: '34px',
-                        borderRadius: '6px',
-                        objectFit: 'cover',
-                      }}
-                    />
-                  ) : (
-                    <div
-                      className="product-icon"
-                      style={{ backgroundColor: product.color }}
-                    >
-                      {product.icon}
-                    </div>
-                  )}
-                  <div className="products">
-                    {product.name}
-                  </div>
-                  <span className="status">
-                    <span className={`status-circle ${product.inStock ? 'green' : ''}`} />
-                    {product.inStock ? 'In Stock' : 'Out of Stock'}
-                  </span>
-                  <span className="price">
-                    {(product.compareAtPrice || product.originalPrice) && (
-                      <span className="original-price">
-                        ${(product.compareAtPrice || product.originalPrice).toFixed(2)}
-                      </span>
-                    )}
-                    ${product.price.toFixed(2)}
-                  </span>
-                  <div className="button-wrapper">
-                    <button
-                      className={`content-button status-button ${!product.inStock ? 'open' : ''}`}
-                      onClick={() => {
-                        if (product.shopifyUrl) {
-                          window.open(product.shopifyUrl, '_blank')
-                        } else {
-                          openPopup('addToCart')
-                        }
-                      }}
-                    >
-                      {product.shopifyUrl && !usingFallback ? 'Buy Now' : 'Add to Cart'}
-                    </button>
-                    <div className="menu" />
-                    <button
-                      className={`dropdown ${activeDropdown === product.id ? 'is-active' : ''}`}
-                      onClick={(e) => toggleDropdown(product.id, e)}
-                    >
-                      <ul>
-                        <li onClick={() => openPopup('quickView')}>
-                          <a href="#">Quick View</a>
-                        </li>
-                        <li>
-                          <a href="#">Add to Wishlist</a>
-                        </li>
-                        {product.shopifyUrl && !usingFallback && (
-                          <li>
-                            <a href={product.shopifyUrl} target="_blank" rel="noopener noreferrer">
-                              View on Store
-                            </a>
-                          </li>
-                        )}
-                        <li>
-                          <a href="#">View Lab Results</a>
-                        </li>
-                      </ul>
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <ProductDetail
+              product={selectedProduct}
+              onClose={onCloseDetail}
+              onAddToCart={onAddToCartFromDetail}
+            />
           </div>
         )}
 
-        {/* Popular Categories */}
-        <div className="content-section">
-          <div className="content-section-title">Popular Categories</div>
-          <div className="apps-card">
-            {featuredProducts.map((product) => (
-              <div
-                key={product.id}
-                className="app-card"
-                onClick={() => openPopup('productDetail')}
-              >
-                <span>
-                  <div
-                    className="card-icon"
-                    style={{ backgroundColor: product.color }}
-                  >
-                    {product.icon}
-                  </div>
-                  {product.name}
-                </span>
-                <div className="app-card__subtext">{product.description}</div>
-                <div className="app-card-buttons">
-                  <button className="content-button status-button">
-                    Shop Now
-                  </button>
-                  <div className="menu" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Best Sellers / More Products */}
-        {!loading && bestSellers.length > 0 && (
+        {/* Products Grid */}
+        {!selectedProduct && !loading && filteredProducts.length > 0 && (
           <div className="content-section">
             <div className="content-section-title">
-              {activeTab === 'all' ? 'More Products' : 'More Results'}
+              {getSectionTitle()}
+              <span style={{ fontSize: '12px', opacity: 0.5, marginLeft: '10px', fontWeight: 'normal' }}>
+                {filteredProducts.length} items
+              </span>
+              {sidebarCategory && (
+                <button
+                  onClick={onClearSidebarCategory}
+                  style={{
+                    marginLeft: '12px',
+                    background: 'none',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--theme-color)',
+                    fontSize: '11px',
+                    padding: '3px 10px',
+                    borderRadius: '20px',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--body-font)',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => { e.target.style.backgroundColor = '#3a6df0'; e.target.style.borderColor = '#3a6df0' }}
+                  onMouseLeave={(e) => { e.target.style.backgroundColor = 'transparent'; e.target.style.borderColor = 'var(--border-color)' }}
+                >
+                  Clear filter ✕
+                </button>
+              )}
             </div>
-            <ul>
-              {bestSellers.map((product) => (
-                <li key={product.id} className="adobe-product">
-                  {product.image ? (
-                    <img
-                      src={product.image}
-                      alt={product.imageAlt || product.name}
-                      className="product-icon"
-                      style={{
-                        width: '34px',
-                        height: '34px',
-                        borderRadius: '6px',
-                        objectFit: 'cover',
-                      }}
-                    />
-                  ) : (
-                    <div
-                      className="product-icon"
-                      style={{ backgroundColor: product.color }}
-                    >
-                      {product.icon}
-                    </div>
-                  )}
-                  <div className="products">
-                    {product.name}
-                  </div>
-                  <span className="status">
-                    <span className={`status-circle ${product.inStock ? 'green' : ''}`} />
-                    {product.inStock ? 'In Stock' : 'Out of Stock'}
-                  </span>
-                  <span className="price">
-                    {(product.compareAtPrice || product.originalPrice) && (
-                      <span className="original-price">
-                        ${(product.compareAtPrice || product.originalPrice).toFixed(2)}
-                      </span>
+            <div className="products-grid">
+              {filteredProducts.map((product) => (
+                <div
+                  key={product.id}
+                  className="product-card"
+                  onClick={() => onProductClick(product)}
+                >
+                  {/* Product Image */}
+                  <div className="product-card-image">
+                    {product.image ? (
+                      <img src={product.image} alt={product.imageAlt || product.name} />
+                    ) : (
+                      <div className="product-card-placeholder">
+                        <span>{product.icon}</span>
+                      </div>
                     )}
-                    ${product.price.toFixed(2)}
-                  </span>
-                  <div className="button-wrapper">
-                    <button
-                      className={`content-button status-button ${!product.inStock ? 'open' : ''}`}
-                      onClick={() => {
-                        if (product.shopifyUrl && !usingFallback) {
-                          window.open(product.shopifyUrl, '_blank')
-                        } else {
-                          openPopup('addToCart')
-                        }
-                      }}
-                    >
-                      {product.shopifyUrl && !usingFallback ? 'Buy Now' : 'Add to Cart'}
-                    </button>
-                    <div className="menu" />
+                    {product.compareAtPrice && product.compareAtPrice > product.price && (
+                      <div className="product-card-badge">SALE</div>
+                    )}
+                    {!product.inStock && (
+                      <div className="product-card-badge out-of-stock">SOLD OUT</div>
+                    )}
                   </div>
-                </li>
+                  {/* Product Info */}
+                  <div className="product-card-info">
+                    <div className="product-card-name">{truncateName(product.name)}</div>
+                    <div className="product-card-price">
+                      {product.compareAtPrice && product.compareAtPrice > product.price && (
+                        <span className="original-price">${product.compareAtPrice.toFixed(2)}</span>
+                      )}
+                      <span>${product.price.toFixed(2)}</span>
+                    </div>
+                    <button
+                      className={`content-button status-button product-card-btn ${!product.inStock ? 'open' : ''}`}
+                      onClick={(e) => handleAddToCart(product, e)}
+                      disabled={!product.inStock}
+                    >
+                      {product.inStock ? 'Add to Cart' : 'Sold Out'}
+                    </button>
+                  </div>
+                </div>
               ))}
-            </ul>
+            </div>
+          </div>
+        )}
+
+        {!selectedProduct && !loading && filteredProducts.length === 0 && (
+          <div className="content-section">
+            <div className="content-section-title">
+              {getSectionTitle()}
+              {sidebarCategory && (
+                <button
+                  onClick={onClearSidebarCategory}
+                  style={{
+                    marginLeft: '12px',
+                    background: 'none',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--theme-color)',
+                    fontSize: '11px',
+                    padding: '3px 10px',
+                    borderRadius: '20px',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--body-font)',
+                  }}
+                >
+                  Clear filter ✕
+                </button>
+              )}
+            </div>
+            <p style={{ color: 'var(--inactive-color)', fontSize: '14px' }}>
+              No products found in this category. Try selecting a different one.
+            </p>
           </div>
         )}
       </div>

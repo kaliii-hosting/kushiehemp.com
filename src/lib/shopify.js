@@ -34,9 +34,14 @@ const ICON_COLORS = [
 function formatProduct(node, index) {
   const variant = node.variants?.edges?.[0]?.node
   const image = node.images?.edges?.[0]?.node
+  const allImages = (node.images?.edges || []).map(e => ({
+    url: e.node.url,
+    altText: e.node.altText || node.title,
+  }))
 
   return {
     id: node.id,
+    variantId: variant?.id || null,
     handle: node.handle,
     name: node.title,
     description: node.description,
@@ -49,6 +54,7 @@ function formatProduct(node, index) {
     currencyCode: variant?.price?.currencyCode || 'USD',
     inStock: node.availableForSale,
     image: image?.url || null,
+    images: allImages,
     imageAlt: image?.altText || node.title,
     productType: node.productType || '',
     tags: node.tags || [],
@@ -57,11 +63,15 @@ function formatProduct(node, index) {
   }
 }
 
-// Fetch all products
-export async function fetchAllProducts(first = 50) {
+// Fetch all products (paginated to get all)
+export async function fetchAllProducts(first = 100) {
   const query = `
-    query GetProducts($first: Int!) {
-      products(first: $first) {
+    query GetProducts($first: Int!, $after: String) {
+      products(first: $first, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         edges {
           node {
             id
@@ -73,7 +83,7 @@ export async function fetchAllProducts(first = 50) {
             vendor
             availableForSale
             onlineStoreUrl
-            images(first: 1) {
+            images(first: 5) {
               edges {
                 node {
                   url
@@ -84,6 +94,7 @@ export async function fetchAllProducts(first = 50) {
             variants(first: 1) {
               edges {
                 node {
+                  id
                   price {
                     amount
                     currencyCode
@@ -101,8 +112,21 @@ export async function fetchAllProducts(first = 50) {
     }
   `
 
-  const data = await shopifyFetch(query, { first })
-  return data.products.edges.map((edge, index) => formatProduct(edge.node, index))
+  let allProducts = []
+  let hasNextPage = true
+  let after = null
+
+  while (hasNextPage) {
+    const data = await shopifyFetch(query, { first, after })
+    const products = data.products.edges.map((edge, index) =>
+      formatProduct(edge.node, allProducts.length + index)
+    )
+    allProducts = [...allProducts, ...products]
+    hasNextPage = data.products.pageInfo.hasNextPage
+    after = data.products.pageInfo.endCursor
+  }
+
+  return allProducts
 }
 
 // Fetch products by collection/type

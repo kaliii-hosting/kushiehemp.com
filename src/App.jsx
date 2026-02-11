@@ -3,13 +3,24 @@ import Header from './components/Header'
 import Sidebar from './components/Sidebar'
 import MainContent from './components/MainContent'
 import Popup from './components/Popup'
+import CartSidebar from './components/CartSidebar'
+import WelcomePage from './components/WelcomePage'
+import { useCart } from './context/CartContext'
+import useShopifyProducts from './hooks/useShopifyProducts'
 
 function App() {
+  const [ageVerified, setAgeVerified] = useState(false)
   const [isLightMode, setIsLightMode] = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
   const [showPopup, setShowPopup] = useState(false)
   const [popupType, setPopupType] = useState('subscription')
   const [activeDropdown, setActiveDropdown] = useState(null)
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [sidebarCategory, setSidebarCategory] = useState(null)
+
+  const { addToCart, setIsCartOpen } = useCart()
+  const { products, loading, usingFallback } = useShopifyProducts()
 
   const toggleTheme = () => {
     setIsLightMode(!isLightMode)
@@ -22,6 +33,39 @@ function App() {
 
   const closePopup = () => {
     setShowPopup(false)
+  }
+
+  const handleProductClick = (product) => {
+    setSelectedProduct(product)
+  }
+
+  const handleCloseDetail = () => {
+    setSelectedProduct(null)
+  }
+
+  const handleAddToCartFromDetail = (product) => {
+    addToCart(product)
+    setIsCartOpen(true)
+  }
+
+  const handleAgeVerified = () => {
+    setAgeVerified(true)
+  }
+
+  const handleSidebarCategoryChange = (categoryId) => {
+    setSidebarCategory(categoryId)
+    setSelectedProduct(null)
+  }
+
+  const handleProductClickFromSearch = (product) => {
+    setSelectedProduct(product)
+    setSearchTerm('')
+    setSearchFocused(false)
+  }
+
+  // Show Welcome/Age Verification page first
+  if (!ageVerified) {
+    return <WelcomePage onVerified={handleAgeVerified} />
   }
 
   return (
@@ -38,16 +82,29 @@ function App() {
           toggleTheme={toggleTheme}
           searchFocused={searchFocused}
           setSearchFocused={setSearchFocused}
+          products={products}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          onProductClick={handleProductClickFromSearch}
         />
 
         <div className="wrapper">
-          <Sidebar />
+          <Sidebar
+            activeCategory={sidebarCategory}
+            onCategoryChange={handleSidebarCategoryChange}
+          />
 
           <MainContent
             searchFocused={searchFocused}
-            openPopup={openPopup}
-            activeDropdown={activeDropdown}
-            setActiveDropdown={setActiveDropdown}
+            selectedProduct={selectedProduct}
+            onProductClick={handleProductClick}
+            onCloseDetail={handleCloseDetail}
+            onAddToCartFromDetail={handleAddToCartFromDetail}
+            sidebarCategory={sidebarCategory}
+            onClearSidebarCategory={() => setSidebarCategory(null)}
+            products={products}
+            loading={loading}
+            usingFallback={usingFallback}
           />
         </div>
       </div>
@@ -64,6 +121,10 @@ function App() {
         popupType={popupType}
         onClose={closePopup}
       />
+
+      {/* Cart Sidebar */}
+      <CartSidebar />
+
     </div>
   )
 }
