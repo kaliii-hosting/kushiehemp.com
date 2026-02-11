@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useCart } from '../context/CartContext'
+import { useAuth } from '../context/AuthContext'
+import { db } from '../lib/firebase'
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
 
 function CartSidebar() {
   const {
@@ -13,6 +16,7 @@ function CartSidebar() {
     setIsCartOpen,
     getCheckoutUrl,
   } = useCart()
+  const { user } = useAuth()
 
   // Lock body scroll when cart is open
   useEffect(() => {
@@ -34,9 +38,37 @@ function CartSidebar() {
     return words.slice(0, 4).join(' ') + '...'
   }
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
+    // Save order to Firestore if user is logged in
+    if (user && cartItems.length > 0) {
+      try {
+        await addDoc(collection(db, 'users', user.uid, 'orders'), {
+          items: cartItems.map((item) => ({
+            id: item.id,
+            variantId: item.variantId,
+            name: item.name,
+            price: item.price,
+            image: item.image,
+            quantity: item.quantity,
+            handle: item.handle,
+          })),
+          total: cartTotal,
+          itemCount: cartCount,
+          createdAt: serverTimestamp(),
+          status: 'completed',
+        })
+      } catch (err) {
+        console.error('Failed to save order:', err)
+      }
+    }
+
+    // Open Shopify checkout
     const url = getCheckoutUrl()
     window.open(url, '_blank')
+
+    // Clear cart after checkout
+    clearCart()
+    setIsCartOpen(false)
   }
 
   return (
@@ -49,7 +81,7 @@ function CartSidebar() {
           left: 0,
           width: '100%',
           height: '100%',
-          backgroundColor: 'rgba(36, 39, 59, 0.8)',
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
           opacity: isCartOpen ? 1 : 0,
           visibility: isCartOpen ? 'visible' : 'hidden',
           transition: 'opacity 0.3s, visibility 0.3s',
@@ -70,7 +102,7 @@ function CartSidebar() {
           height: '100vh',
           backgroundColor: 'var(--popup-bg)',
           borderLeft: '1px solid var(--border-color)',
-          boxShadow: '-4px 0 30px rgba(0, 0, 0, 0.4)',
+          boxShadow: '-4px 0 20px rgba(0, 0, 0, 0.1)',
           zIndex: 21,
           display: 'flex',
           flexDirection: 'column',
@@ -336,7 +368,7 @@ function CartSidebar() {
                     >
                       <span
                         style={{
-                          color: '#3bf083',
+                          color: '#16a34a',
                           fontSize: '14px',
                           fontWeight: 600,
                         }}

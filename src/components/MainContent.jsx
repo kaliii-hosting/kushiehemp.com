@@ -21,29 +21,46 @@ function MainContent({ searchFocused, selectedProduct, onProductClick, onCloseDe
     return words.slice(0, 4).join(' ') + '...'
   }
 
-  // Category name lookup for display
-  const categoryNames = {
-    flower: 'Flower',
-    edibles: 'Edibles',
-    concentrates: 'Concentrates',
-    cartridges: 'Cartridges',
-    disposables: 'Disposables',
-    pods: 'Pods',
-    batteries: 'Batteries',
-    prerolls: 'Infused Prerolls',
-    bundles: 'Bundles & Deals',
-    new: 'New Arrivals',
+  // Resolve display name for the active sidebar filter
+  const getCategoryDisplayName = (catId) => {
+    if (!catId) return null
+    // Strain filter: "strain:indica" -> "Indica"
+    if (catId.startsWith('strain:')) {
+      const key = catId.slice(7)
+      return key.charAt(0).toUpperCase() + key.slice(1)
+    }
+    // Compound filter: "compound:thca" -> "THCA"
+    if (catId.startsWith('compound:')) {
+      return catId.slice(9).toUpperCase()
+    }
+    // ProductType-based filter: find matching product to get original casing
+    const match = products.find((p) => {
+      const type = (p.productType || p.category || '').toLowerCase().trim()
+      return type === catId
+    })
+    if (match) return (match.productType || match.category || catId).trim()
+    return catId
   }
 
   // Filter products based on sidebar category OR active tab
   const filteredProducts = products.filter((product) => {
     // Sidebar category takes priority when set
     if (sidebarCategory) {
-      if (sidebarCategory === 'new') {
-        return products.indexOf(product) >= Math.max(0, products.length - 10)
+      // Strain-based filter: match product.strain
+      if (sidebarCategory.startsWith('strain:')) {
+        const strainKey = sidebarCategory.slice(7)
+        return (product.strain || '').toLowerCase() === strainKey
       }
-      // Match by product.category field (or productType for Shopify products)
-      const cat = (product.category || product.productType || '').toLowerCase()
+
+      // Compound-based filter: match against product tags (thca/thcp)
+      if (sidebarCategory.startsWith('compound:')) {
+        const compoundKey = sidebarCategory.slice(9)
+        const productTags = (product.tags || []).map((t) => t.toLowerCase().trim())
+        return productTags.includes(compoundKey)
+      }
+
+      // ProductType-based filter (from Categories)
+      const cat = (product.category || product.productType || '').toLowerCase().trim()
       return cat === sidebarCategory
     }
 
@@ -78,7 +95,7 @@ function MainContent({ searchFocused, selectedProduct, onProductClick, onCloseDe
   // Determine what title to show
   const getSectionTitle = () => {
     if (sidebarCategory) {
-      return categoryNames[sidebarCategory] || sidebarCategory
+      return getCategoryDisplayName(sidebarCategory) || sidebarCategory
     }
     return tabs.find((t) => t.id === activeTab)?.label || 'All Products'
   }

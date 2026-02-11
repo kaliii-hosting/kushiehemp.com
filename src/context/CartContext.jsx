@@ -1,10 +1,15 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef } from 'react'
+import { useAuth } from './AuthContext'
+import { db } from '../lib/firebase'
+import { doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
 
 const CartContext = createContext()
 
 const SHOPIFY_STORE_DOMAIN = 'wa16ig-yj.myshopify.com'
 
 export function CartProvider({ children }) {
+  const { user } = useAuth()
+
   const [cartItems, setCartItems] = useState(() => {
     try {
       const saved = localStorage.getItem('kushie-cart')
@@ -15,18 +20,93 @@ export function CartProvider({ children }) {
   })
   const [isCartOpen, setIsCartOpen] = useState(false)
 
-  // Persist cart to localStorage
+  // Refs for Firestore sync
+  const unsubFirestoreRef = useRef(null)
+  const isLoadingFromFirestore = useRef(false)
+  const hasMergedRef = useRef(false)
+
+  // Firestore sync: listen to cart document when user is logged in
   useEffect(() => {
-    try {
-      localStorage.setItem('kushie-cart', JSON.stringify(cartItems))
-    } catch {
-      // localStorage unavailable
+    // Cleanup previous listener
+    if (unsubFirestoreRef.current) {
+      unsubFirestoreRef.current()
+      unsubFirestoreRef.current = null
     }
-  }, [cartItems])
+
+    if (user) {
+      const cartDocRef = doc(db, 'users', user.uid, 'cart', 'current')
+      hasMergedRef.current = false
+
+      unsubFirestoreRef.current = onSnapshot(cartDocRef, (snapshot) => {
+        const firestoreItems = snapshot.exists() ? (snapshot.data().items || []) : []
+
+        // Only merge once on initial login
+        if (!hasMergedRef.current) {
+          hasMergedRef.current = true
+          isLoadingFromFirestore.current = true
+
+          setCartItems((localItems) => {
+            // Merge: union of local + firestore, keep higher quantity for dupes
+            const merged = [...firestoreItems]
+            localItems.forEach((localItem) => {
+              const matchKey = localItem.variantId || localItem.id
+              const existing = merged.find(
+                (item) => (item.variantId || item.id) === matchKey
+              )
+              if (existing) {
+                existing.quantity = Math.max(existing.quantity, localItem.quantity)
+              } else {
+                merged.push(localItem)
+              }
+            })
+            return merged
+          })
+
+          // Clear localStorage - Firestore is now source of truth
+          try { localStorage.removeItem('kushie-cart') } catch {}
+          setTimeout(() => { isLoadingFromFirestore.current = false }, 200)
+        } else {
+          // Subsequent updates from Firestore (e.g., another device)
+          isLoadingFromFirestore.current = true
+          setCartItems(firestoreItems)
+          setTimeout(() => { isLoadingFromFirestore.current = false }, 200)
+        }
+      })
+    } else {
+      // User logged out - reset merge flag
+      hasMergedRef.current = false
+    }
+
+    return () => {
+      if (unsubFirestoreRef.current) {
+        unsubFirestoreRef.current()
+      }
+    }
+  }, [user])
+
+  // Persist cart: Firestore when logged in, localStorage when logged out
+  useEffect(() => {
+    if (isLoadingFromFirestore.current) return
+
+    if (user) {
+      const cartDocRef = doc(db, 'users', user.uid, 'cart', 'current')
+      setDoc(cartDocRef, {
+        items: cartItems,
+        updatedAt: serverTimestamp(),
+      }, { merge: true }).catch((err) => {
+        console.error('Failed to save cart to Firestore:', err)
+      })
+    } else {
+      try {
+        localStorage.setItem('kushie-cart', JSON.stringify(cartItems))
+      } catch {
+        // localStorage unavailable
+      }
+    }
+  }, [cartItems, user])
 
   const addToCart = (product) => {
     setCartItems((prev) => {
-      // Use variantId if available, otherwise fall back to id
       const matchKey = product.variantId || product.id
       const existing = prev.find(
         (item) => (item.variantId || item.id) === matchKey
@@ -80,28 +160,22 @@ export function CartProvider({ children }) {
     setCartItems([])
   }
 
-  // Computed total price
   const cartTotal = cartItems.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0
   )
 
-  // Computed total item count
   const cartCount = cartItems.reduce(
     (sum, item) => sum + item.quantity,
     0
   )
 
-  // Build Shopify checkout URL from cart items
   const getCheckoutUrl = () => {
-    // If items have Shopify variant IDs (gid://shopify/ProductVariant/xxxxx),
-    // extract the numeric ID for the /cart/ URL format
     const lineItems = cartItems
       .map((item) => {
         let numericId = null
 
         if (item.variantId) {
-          // Handle GID format: gid://shopify/ProductVariant/12345
           const gidMatch = String(item.variantId).match(/(\d+)$/)
           if (gidMatch) {
             numericId = gidMatch[1]
@@ -126,7 +200,6 @@ export function CartProvider({ children }) {
       return `https://${SHOPIFY_STORE_DOMAIN}/cart/${lineItems.join(',')}`
     }
 
-    // Fallback: just open the store
     return `https://${SHOPIFY_STORE_DOMAIN}/cart`
   }
 

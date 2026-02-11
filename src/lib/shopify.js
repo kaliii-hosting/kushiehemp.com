@@ -31,6 +31,40 @@ const ICON_COLORS = [
   '#ec4899', '#14b8a6', '#64748b', '#f43f5e', '#06b6d4',
 ]
 
+// Derive category and strain from product title when productType is empty
+function classifyProduct(title) {
+  const t = (title || '').toLowerCase()
+  let category = ''
+  let strain = ''
+
+  // Detect strain from parentheses: (Indica), (Hybrid), (Sativa)
+  const strainMatch = title.match(/\((Indica|Hybrid|Sativa)\)/i)
+  if (strainMatch) {
+    strain = strainMatch[1].charAt(0).toUpperCase() + strainMatch[1].slice(1).toLowerCase()
+  }
+
+  // Detect product category from title keywords
+  if (t.includes('dspsbls') || t.includes('disposable')) {
+    category = 'Disposables'
+  } else if (t.includes('infused preroll')) {
+    category = 'Infused Prerolls'
+  } else if (t.includes('premium flower') || t.includes('exotic') && t.includes('flower')) {
+    category = 'Flower'
+  } else if (t.includes('cartridge') || t.includes('cart')) {
+    category = 'Cartridges'
+  } else if (t.includes('edible') || t.includes('gumm')) {
+    category = 'Edibles'
+  } else if (t.includes('concentrate') || t.includes('wax') || t.includes('shatter')) {
+    category = 'Concentrates'
+  } else if (t.includes('pod')) {
+    category = 'Pods'
+  } else if (t.includes('batter')) {
+    category = 'Batteries'
+  }
+
+  return { category, strain }
+}
+
 function formatProduct(node, index) {
   const variant = node.variants?.edges?.[0]?.node
   const image = node.images?.edges?.[0]?.node
@@ -38,6 +72,10 @@ function formatProduct(node, index) {
     url: e.node.url,
     altText: e.node.altText || node.title,
   }))
+
+  // Use Shopify productType if set, otherwise derive from title
+  const { category: derivedCategory, strain } = classifyProduct(node.title)
+  const productType = node.productType || derivedCategory
 
   return {
     id: node.id,
@@ -56,7 +94,8 @@ function formatProduct(node, index) {
     image: image?.url || null,
     images: allImages,
     imageAlt: image?.altText || node.title,
-    productType: node.productType || '',
+    productType,
+    strain,
     tags: node.tags || [],
     vendor: node.vendor || '',
     shopifyUrl: node.onlineStoreUrl || `https://${SHOPIFY_STORE_DOMAIN}/products/${node.handle}`,

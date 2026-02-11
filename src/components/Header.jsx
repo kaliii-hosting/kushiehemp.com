@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useCart } from '../context/CartContext'
+import { useAuth } from '../context/AuthContext'
 import useSearchProducts from '../hooks/useSearchProducts'
 
-function Header({ isLightMode, toggleTheme, searchFocused, setSearchFocused, products, searchTerm, setSearchTerm, onProductClick }) {
+function Header({ searchFocused, setSearchFocused, products, searchTerm, setSearchTerm, onProductClick, onLogoClick, onToggleMobileMenu, onSignInClick, onProfileClick }) {
   const { cartCount, setIsCartOpen } = useCart()
+  const { user } = useAuth()
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const [isOpen, setIsOpen] = useState(false)
   const searchRef = useRef(null)
@@ -64,10 +66,9 @@ function Header({ isLightMode, toggleTheme, searchFocused, setSearchFocused, pro
       clearTimeout(blurTimeoutRef.current)
       blurTimeoutRef.current = null
     }
-    // Only set searchFocused (wide mode) if there is already text
-    // This prevents the header from reshuffling on every click
+    // Expand search bar on focus (wide mode)
+    setSearchFocused(true)
     if (searchTerm.length >= 1) {
-      setSearchFocused(true)
       setIsOpen(true)
     }
   }
@@ -76,10 +77,7 @@ function Header({ isLightMode, toggleTheme, searchFocused, setSearchFocused, pro
     // Delay blur to allow mousedown on dropdown items to fire first
     blurTimeoutRef.current = setTimeout(() => {
       setIsOpen(false)
-      // Only exit wide mode if the search is empty
-      if (!searchTerm) {
-        setSearchFocused(false)
-      }
+      setSearchFocused(false)
     }, 200)
   }
 
@@ -160,10 +158,19 @@ function Header({ isLightMode, toggleTheme, searchFocused, setSearchFocused, pro
 
   return (
     <div className="header">
-      <div className="logo">
+      {/* Hamburger menu button - mobile only */}
+      <button className="mobile-menu-btn" onClick={onToggleMobileMenu} aria-label="Open menu">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+
+      <div className="logo" onClick={onLogoClick} style={{ cursor: 'pointer' }}>
         <img
           className="logo-img"
-          src="https://fchtwxunzmkzbnibqbwl.supabase.co/storage/v1/object/public/kushie01/logos/Kushie_White_logo_1753092351582_38ok1bd.png"
+          src="https://fchtwxunzmkzbnibqbwl.supabase.co/storage/v1/object/public/kushie01/logos/Kushie%20Invoice%20logo.png"
           alt="Kushie Hemp"
         />
       </div>
@@ -262,19 +269,6 @@ function Header({ isLightMode, toggleTheme, searchFocused, setSearchFocused, pro
       </div>
 
       <div className="header-profile">
-        <div className="dark-light" onClick={toggleTheme}>
-          <svg
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-          </svg>
-        </div>
-
         <div className="cart-badge" onClick={() => setIsCartOpen(true)}>
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -306,11 +300,28 @@ function Header({ isLightMode, toggleTheme, searchFocused, setSearchFocused, pro
           </svg>
         </div>
 
-        <img
-          className="profile-img"
-          src="https://images.unsplash.com/photo-1600486913747-55e5470d6f40?w=100&h=100&fit=crop&crop=face"
-          alt="Profile"
-        />
+        {user ? (
+          <div
+            className="profile-img profile-initials"
+            onClick={onProfileClick}
+            title={user.displayName || user.email}
+            style={{ cursor: 'pointer' }}
+          >
+            {(user.displayName || user.email || '?').charAt(0).toUpperCase()}
+          </div>
+        ) : (
+          <div
+            className="profile-img profile-signin"
+            onClick={onSignInClick}
+            title="Sign In"
+            style={{ cursor: 'pointer' }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          </div>
+        )}
       </div>
     </div>
   )

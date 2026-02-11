@@ -1,72 +1,81 @@
 import { useState } from 'react'
 
 function WelcomePage({ onVerified }) {
-  const [hoveredButton, setHoveredButton] = useState(null)
+  const [isChecked, setIsChecked] = useState(false)
   const [denied, setDenied] = useState(false)
 
-  const handleYes = () => {
-    onVerified()
-  }
-
-  const handleNo = () => {
-    setDenied(true)
+  const handleToggle = () => {
+    if (!isChecked) {
+      setIsChecked(true)
+      setDenied(false)
+      // Small delay to let animation play, then verify
+      setTimeout(() => {
+        onVerified()
+      }, 800)
+    } else {
+      setIsChecked(false)
+      setDenied(true)
+    }
   }
 
   return (
     <div className="welcome-page">
-      {/* Video Background */}
-      <div className="video-bg">
-        <video autoPlay muted loop>
-          <source src="https://assets.codepen.io/3364143/7btrrd.mp4" type="video/mp4" />
-        </video>
-      </div>
-
-      {/* Glass Container */}
       <div className="welcome-container">
         {/* Logo */}
         <div className="welcome-logo">
           <img
             className="welcome-logo-img"
-            src="https://fchtwxunzmkzbnibqbwl.supabase.co/storage/v1/object/public/kushie01/logos/Kushie_White_logo_1753092351582_38ok1bd.png"
+            src="https://fchtwxunzmkzbnibqbwl.supabase.co/storage/v1/object/public/kushie01/logos/Kushie%20Invoice%20logo.png"
             alt="Kushie Hemp"
           />
         </div>
 
-        {/* Age Verification Banner */}
+        {/* Age Verification Card */}
         <div className="welcome-banner">
           <div className="welcome-banner-content">
-            <div className="welcome-banner-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-            </div>
             <h1 className="welcome-banner-title">Age Verification Required</h1>
             <p className="welcome-banner-text">
               You must be 21 years of age or older to enter this website.
-              By clicking "Yes, I'm 21+" you confirm that you are of legal age
-              to purchase hemp products in your state.
+              Toggle the switch to confirm your age.
             </p>
 
-            {!denied ? (
-              <div className="welcome-banner-actions">
-                <button
-                  className="welcome-btn welcome-btn-primary"
-                  onClick={handleYes}
-                  onMouseEnter={() => setHoveredButton('yes')}
-                  onMouseLeave={() => setHoveredButton(null)}
-                >
-                  Yes, I'm 21+
-                </button>
-                <button
-                  className="welcome-btn welcome-btn-secondary"
-                  onClick={handleNo}
-                  onMouseEnter={() => setHoveredButton('no')}
-                  onMouseLeave={() => setHoveredButton(null)}
-                >
-                  No, I'm Under 21
-                </button>
-              </div>
-            ) : (
+            {/* Toggle Switch Section */}
+            <div className="welcome-toggle-section">
+              <span className={`welcome-toggle-label welcome-toggle-label--left ${!isChecked ? 'is-active' : ''}`}>
+                Under 21
+              </span>
+
+              <label className="switch">
+                <span className="switch__wrapper">
+                  <input
+                    className="switch__input"
+                    type="checkbox"
+                    role="switch"
+                    checked={isChecked}
+                    onChange={handleToggle}
+                  />
+                  <span className="switch__emoji">
+                    <span className="switch__emoji-face switch__emoji-face--sad">
+                      <span className="switch__emoji-eye"></span>
+                      <span className="switch__emoji-eye"></span>
+                      <span className="switch__emoji-mouth"></span>
+                    </span>
+                    <span className="switch__emoji-face">
+                      <span className="switch__emoji-eye"></span>
+                      <span className="switch__emoji-eye"></span>
+                      <span className="switch__emoji-mouth"></span>
+                    </span>
+                  </span>
+                </span>
+                <span className="switch__label">Age Verification</span>
+              </label>
+
+              <span className={`welcome-toggle-label welcome-toggle-label--right ${isChecked ? 'is-active' : ''}`}>
+                Over 21
+              </span>
+            </div>
+
+            {denied && (
               <div className="welcome-denied">
                 <div className="welcome-denied-icon">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -77,12 +86,6 @@ function WelcomePage({ onVerified }) {
                 <p className="welcome-denied-text">
                   Sorry, you must be 21 or older to access this site.
                 </p>
-                <button
-                  className="welcome-btn welcome-btn-secondary"
-                  onClick={() => setDenied(false)}
-                >
-                  Go Back
-                </button>
               </div>
             )}
           </div>
